@@ -1,0 +1,25 @@
+spring:
+  # profiles:
+  #   active: test
+
+  sql:
+    init:
+      mode: always
+
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/statsdb
+    username: dbuser
+    password: 12345
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+server:
+  port: 0
