@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import ru.yandex.practicum.dto.EndpointHitDto;
+import ru.yandex.practicum.dto.StatsRequest;
 import ru.yandex.practicum.dto.ViewStatsDto;
 
 import java.time.LocalDateTime;
@@ -18,12 +19,5 @@ public interface StatsOperations {
     ResponseEntity<EndpointHitDto> saveHit(@Valid @RequestBody EndpointHitDto hitDto);
 
     @GetMapping("/stats")
-    List<ViewStatsDto> getStats(
-            @RequestParam
-            @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime start,
-            @RequestParam
-            @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime end,
-            @RequestParam(required = false, defaultValue = "") List<String> uris,
-            @RequestParam(required = false, defaultValue = "false") boolean unique
-    );
+    List<ViewStatsDto> getStats(StatsRequest request);
 }

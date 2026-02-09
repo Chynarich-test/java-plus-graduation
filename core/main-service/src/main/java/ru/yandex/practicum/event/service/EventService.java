@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import ru.yandex.practicum.client.StatsClient;
 import ru.yandex.practicum.common.EntityValidator;
 import ru.yandex.practicum.dto.EndpointHitDto;
+import ru.yandex.practicum.dto.StatsRequest;
 import ru.yandex.practicum.dto.ViewStatsDto;
 import ru.yandex.practicum.event.dao.EventRepository;
 import ru.yandex.practicum.event.dto.*;
@@ -259,7 +260,12 @@ public class EventService {
         try {
             LocalDateTime start = LocalDateTime.now().minusYears(10);
             LocalDateTime end = LocalDateTime.now().plusDays(1);
-            List<ViewStatsDto> stats = statsClient.getStats(start, end, uris, true);
+            List<ViewStatsDto> stats = statsClient.getStats(StatsRequest.builder()
+                    .start(start)
+                    .end(end)
+                    .uris(uris)
+                    .unique(true)
+                    .build());
             if (stats == null || stats.isEmpty()) return Map.of();
             return stats.stream().collect(Collectors.toMap(
                     ViewStatsDto::getUri, v -> v.getHits() == null ? 0L : v.getHits()));

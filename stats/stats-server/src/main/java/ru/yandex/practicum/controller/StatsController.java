@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import ru.yandex.practicum.client.StatsOperations;
 import ru.yandex.practicum.dto.EndpointHitDto;
+import ru.yandex.practicum.dto.StatsRequest;
 import ru.yandex.practicum.dto.ViewStatsDto;
 import ru.yandex.practicum.service.StatsService;
 
@@ -40,14 +41,7 @@ public class StatsController implements StatsOperations {
                 .body(savedHit);
     }
 
-    public List<ViewStatsDto> getStats(
-            @RequestParam
-            @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime start,
-            @RequestParam
-            @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime end,
-            @RequestParam(required = false, defaultValue = "") List<String> uris,
-            @RequestParam(required = false, defaultValue = "false") boolean unique
-    ) {
-        return statsService.getStats(start, end, uris, unique);
+    public List<ViewStatsDto> getStats(StatsRequest request) {
+        return statsService.getStats(request);
     }
 }

@@ -1,76 +1,109 @@
-#version: '3.9'
-#
-#services:
-#  stats-db:
-#    image: postgres:16.1
-#    container_name: stats-db
-#    environment:
-#      - POSTGRES_DB=statsdb
-#      - POSTGRES_USER=dbuser
-#      - POSTGRES_PASSWORD=12345
-#    volumes:
-#      - ./volumes/stats-db:/var/lib/postgresql/data
-#    ports:
-#      - "5433:5432"
-#    healthcheck:
-#      test: ["CMD-SHELL", "pg_isready -q -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
-#      interval: 5s
-#      timeout: 5s
-#      retries: 10
-#
-#  stats-server:
-#    build:
-#      context: ./stats-service/stats-server
-#      dockerfile: Dockerfile
-#    image: ewm-stats-server:latest
-#    container_name: stats-server
-#    ports:
-#      - "9090:9090"
-#    depends_on:
-#      stats-db:
-#        condition: service_healthy
-#    environment:
-#      - SPRING_DATASOURCE_URL=jdbc:postgresql://stats-db:5432/statsdb
-#      - SPRING_DATASOURCE_USERNAME=dbuser
-#      - SPRING_DATASOURCE_PASSWORD=12345
-#    healthcheck:
-#      test: [ "CMD-SHELL", "wget -q --spider http://localhost:9090/actuator/health || exit 1" ]
-#      interval: 5s
-#      timeout: 5s
-#      retries: 20
-#
-#  ewm-db:
-#    image: postgres:16.1
-#    container_name: ewm-db
-#    environment:
-#      - POSTGRES_DB=ewmdb
-#      - POSTGRES_USER=dbuser
-#      - POSTGRES_PASSWORD=12345
-#    volumes:
-#      - ./volumes/ewm-db:/var/lib/postgresql/data
-#    ports:
-#      - "5434:5432"
-#    healthcheck:
-#      test: ["CMD-SHELL", "pg_isready -q -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
-#      interval: 5s
-#      timeout: 5s
-#      retries: 10
-#
-#  ewm-service:
-#    build:
-#      context: ./ewm-main-service
-#      dockerfile: Dockerfile
-#    image: ewm-main-service:latest
-#    container_name: ewm-main-service
-#    ports:
-#      - "8080:8080"
-#    depends_on:
-#      stats-server:
-#        condition: service_healthy
-#      ewm-db:
-#        condition: service_healthy
-#    environment:
-#      - SPRING_DATASOURCE_URL=jdbc:postgresql://ewm-db:5432/ewmdb
-#      - SPRING_DATASOURCE_USERNAME=dbuser
-#      - SPRING_DATASOURCE_PASSWORD=12345
-#      - STATS_SERVER_URL=http://stats-server:9090
+services:
+  discovery-server:
+    build: ./infra/discovery-server
+    container_name: discovery-server
+    ports:
+      - "8761:8761"
+    healthcheck:
+      test: [ "CMD", "wget", "-q", "--spider", "http://localhost:8761/eureka/apps" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  config-server:
+    build: ./infra/config-server
+    container_name: config-server
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+    environment:
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://discovery-server:8761/eureka/
+      - SPRING_CLOUD_CONFIG_SERVER_NATIVE_SEARCH_LOCATIONS=/config
+
+
+  stats-db:
+    image: postgres:16.1
+    container_name: stats-db
+    environment:
+      - POSTGRES_DB=statsdb
+      - POSTGRES_USER=dbuser
+      - POSTGRES_PASSWORD=12345
+    volumes:
+      - ./volumes/stats-db:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U dbuser -d statsdb" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  stats-server:
+    build:
+      context: ./stats/stats-server
+      dockerfile: Dockerfile
+    container_name: stats-server
+    depends_on:
+      stats-db:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      config-server:
+        condition: service_started
+    environment:
+      - SPRING_CLOUD_CONFIG_DISCOVERY_ENABLED=true
+      - SPRING_CLOUD_CONFIG_DISCOVERY_SERVICE_ID=config-server
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://stats-db:5432/statsdb
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://discovery-server:8761/eureka/
+
+  ewm-db:
+    image: postgres:16.1
+    container_name: ewm-db
+    environment:
+      - POSTGRES_DB=ewmdb
+      - POSTGRES_USER=dbuser
+      - POSTGRES_PASSWORD=12345
+    volumes:
+      - ./volumes/ewm-db:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U dbuser -d ewmdb" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  main-service:
+    build:
+      context: ./core/main-service
+      dockerfile: Dockerfile
+    container_name: main-service
+    depends_on:
+      stats-server:
+        condition: service_started
+      ewm-db:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      config-server:
+        condition: service_started
+    environment:
+      - SPRING_CLOUD_CONFIG_DISCOVERY_ENABLED=true
+      - SPRING_CLOUD_CONFIG_DISCOVERY_SERVICE_ID=config-server
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://discovery-server:8761/eureka/
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://ewm-db:5432/ewmdb
+
+
+  gateway-server:
+    build:
+      context: ./infra/gateway-server
+      dockerfile: Dockerfile
+    container_name: gateway-server
+    ports:
+      - "8080:8080"
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+      config-server:
+        condition: service_started
+    environment:
+      - SPRING_CLOUD_CONFIG_DISCOVERY_ENABLED=true
+      - SPRING_CLOUD_CONFIG_DISCOVERY_SERVICE_ID=config-server
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://discovery-server:8761/eureka/
+
