@@ -5,9 +5,15 @@ spring:
     import: "configserver:"
   cloud:
     config:
+      fail-fast: true
       discovery:
         enabled: true
         serviceId: config-server
+      retry:
+        max-attempts: 20
+        initial-interval: 3000
+        max-interval: 10000
+        multiplier: 1.5
 
 eureka:
   client:
