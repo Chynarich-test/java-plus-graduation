@@ -38,7 +38,7 @@ public class StatsController implements StatsOperations {
                 .body(savedHit);
     }
 
-    public List<ViewStatsDto> getStats(StatsRequest request) {
+    public List<ViewStatsDto> getStats(@Valid StatsRequest request) {
         return statsService.getStats(request);
     }
 }

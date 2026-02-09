@@ -17,5 +17,5 @@ public interface StatsOperations {
     ResponseEntity<EndpointHitDto> saveHit(@Valid @RequestBody EndpointHitDto hitDto);
 
     @GetMapping("/stats")
-    List<ViewStatsDto> getStats(@SpringQueryMap StatsRequest request);
+    List<ViewStatsDto> getStats(@Valid @SpringQueryMap StatsRequest request);
 }
