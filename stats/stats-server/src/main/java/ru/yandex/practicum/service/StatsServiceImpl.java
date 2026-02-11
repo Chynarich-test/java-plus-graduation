@@ -4,6 +4,7 @@ import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import ru.yandex.practicum.dto.EndpointHitDto;
+import ru.yandex.practicum.dto.StatsRequest;
 import ru.yandex.practicum.dto.ViewStatsDto;
 import ru.yandex.practicum.exception.ValidationException;
 import ru.yandex.practicum.mapper.HitMapper;
@@ -56,11 +57,12 @@ public class StatsServiceImpl implements StatsService {
 
 
     @Override
-    public List<ViewStatsDto> getStats(LocalDateTime start, LocalDateTime end, List<String> uris, boolean unique) {
-        validateTimeRange(start, end);
+    public List<ViewStatsDto> getStats(StatsRequest request) {
+        validateTimeRange(request.getStart(), request.getEnd());
 
-        log.info("Запрос статистики: start={}, end={}, uris={}, unique={}", start, end, uris.size(), unique);
+        log.info("Запрос статистики: start={}, end={}, uris={}, unique={}", request.getStart(), request.getEnd(),
+                request.getUris().size(), request.isUnique());
 
-        return statsRepository.getStats(start, end, uris, unique);
+        return statsRepository.getStats(request.getStart(), request.getEnd(), request.getUris(), request.isUnique());
     }
 }
