@@ -5,13 +5,43 @@ server:
 spring:
   cloud:
     gateway:
-      discovery.locator.enabled: true
+      discovery:
+        locator:
+          enabled: true
       routes:
+        - id: comments_service_route
+          uri: lb://comments-service
+          order: 10
+          predicates:
+            - Path=/admin/comments/**, /users/*/events/*/comments/**, /events/*/comments/**
+
+        - id: event_service_route
+          uri: lb://event-service
+          order: 20
+          predicates:
+            - Path=/admin/events/**, /users/*/events/**, /events/**, /categories/**, /admin/categories/**
+
+        - id: request_service_route
+          uri: lb://request-service
+          order: 30
+          predicates:
+            - Path=/users/*/requests/**
+
+        - id: user_service_route
+          uri: lb://user-service
+          order: 40
+          predicates:
+            - Path=/admin/users/**, /users/**
+
+        - id: compilation_service_route
+          uri: lb://compilation-service
+          order: 50
+          predicates:
+            - Path=/admin/compilations/**, /compilations/**
+
         - id: stats_server_route
           uri: lb://stats-server
+          order: 60
           predicates:
             - Path=/hit, /stats/**
-        - id: main_service_route
-          uri: lb://main-service
-          predicates:
-            - Path=/admin/**, /users/**, /events/**, /categories/**, /compilations/**
+

@@ -21,6 +21,8 @@
         <module>stats</module>
         <module>core</module>
         <module>infra</module>
+        <module>core/request/request-api</module>
+        <module>core/request/request-service</module>
     </modules>
 
     <properties>
