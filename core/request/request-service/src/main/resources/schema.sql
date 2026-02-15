@@ -1,4 +1,4 @@
--- CREATE TYPE request_status AS ENUM ('PENDING', 'CONFIRMED', 'REJECTED', 'CANCELED');
+CREATE TYPE request_status AS ENUM ('PENDING', 'CONFIRMED', 'REJECTED', 'CANCELED');
 
 -- Таблица requests
 CREATE TABLE IF NOT EXISTS requests (
@@ -10,5 +10,5 @@ CREATE TABLE IF NOT EXISTS requests (
     CONSTRAINT uq_request UNIQUE (event_id, requester_id)
 );
 
---CREATE INDEX idx_event_to_category ON requests(event_id);
---CREATE INDEX idx_event_to_user ON requests(requester_id);
+CREATE INDEX idx_event_to_category ON requests(event_id);
+CREATE INDEX idx_event_to_user ON requests(requester_id);

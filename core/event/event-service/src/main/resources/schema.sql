@@ -1,5 +1,5 @@
 -- Типы ENUM
--- CREATE TYPE event_state AS ENUM ('PENDING', 'PUBLISHED', 'CANCELED');
+CREATE TYPE event_state AS ENUM ('PENDING', 'PUBLISHED', 'CANCELED');
 
 
 -- Таблица categories
@@ -29,6 +29,6 @@ CREATE TABLE IF NOT EXISTS events (
     state event_state NOT NULL
 );
 
---  CREATE INDEX idx_event_to_category ON events(category_id);
---  CREATE INDEX idx_event_to_user ON events(initiator_id);
+CREATE INDEX idx_event_to_category ON events(category_id);
+CREATE INDEX idx_event_to_user ON events(initiator_id);
 
