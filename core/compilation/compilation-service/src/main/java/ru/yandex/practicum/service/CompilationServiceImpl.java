@@ -7,6 +7,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import ru.yandex.practicum.common.dsl.validator.EntityValidator;
 import ru.yandex.practicum.common.dsl.exception.ConflictException;
 import ru.yandex.practicum.common.dsl.exception.NotFoundException;
@@ -33,54 +34,56 @@ public class CompilationServiceImpl implements CompilationService {
     private final CompilationMapper compilationMapper;
     private final EntityValidator entityValidator;
     private final EventInternalClient eventInternalClient;
+    private final TransactionTemplate transactionTemplate;
 
     @Override
-    @Transactional
     public CompilationDto createCompilation(NewCompilationDto compilationDto) {
         log.info("Создание новой подборки с названием: {}", compilationDto.getTitle());
 
-        // Проверка уникальности названия
-        if (compilationRepository.existsByTitle(compilationDto.getTitle())) {
-            throw new ConflictException("Подборка с названием='" + compilationDto.getTitle() + "' уже существует");
-        }
-
         List<EventFullDto> events = getEventsByIds(compilationDto.getEvents());
 
-        Compilation compilation = compilationMapper.toEntity(compilationDto);
-        Compilation savedCompilation = compilationRepository.save(compilation);
+        // Проверка уникальности названия
+        Compilation savedCompilation = transactionTemplate.execute(status -> {
+            if (compilationRepository.existsByTitle(compilationDto.getTitle())) {
+                throw new ConflictException("Подборка с названием='" + compilationDto.getTitle() + "' уже существует");
+            }
+            Compilation compilation = compilationMapper.toEntity(compilationDto);
+            return compilationRepository.save(compilation);
+        });
 
         log.info("Подборка создана с id: {}", savedCompilation.getId());
         return compilationMapper.toDto(savedCompilation, events);
     }
 
     @Override
-    @Transactional
     public CompilationDto updateCompilation(Long compId, UpdateCompilationRequest request) {
         log.info("Обновление подборки с id: {}", compId);
 
-        Compilation compilation = entityValidator.ensureAndGet(
-                compilationRepository, compId, "Подборка"
-        );
-
-        // Проверка уникальности названия при обновлении
-        if (request.getTitle() != null && !request.getTitle().equals(compilation.getTitle())) {
-            if (compilationRepository.existsByTitle(request.getTitle())) {
-                throw new ConflictException("Подборка с названием='" + request.getTitle() + "' уже существует");
-            }
-            compilation.setTitle(request.getTitle());
-        }
-
-        if (request.getPinned() != null) {
-            compilation.setPinned(request.getPinned());
-        }
-
         List<EventFullDto> events = getEventsByIds(request.getEvents());
 
-        if (request.getEvents() != null) {
-            compilation.setEventIds(events.stream().map(EventFullDto::getId).collect(Collectors.toSet()));
-        }
+        Compilation updatedCompilation = transactionTemplate.execute(status -> {
+            Compilation compilation = entityValidator.ensureAndGet(
+                    compilationRepository, compId, "Подборка"
+            );
 
-        Compilation updatedCompilation = compilationRepository.save(compilation);
+            if (request.getTitle() != null && !request.getTitle().equals(compilation.getTitle())) {
+                if (compilationRepository.existsByTitle(request.getTitle())) {
+                    throw new ConflictException("Подборка с названием='" + request.getTitle() + "' уже существует");
+                }
+                compilation.setTitle(request.getTitle());
+            }
+
+            if (request.getPinned() != null) {
+                compilation.setPinned(request.getPinned());
+            }
+
+            if (request.getEvents() != null) {
+                compilation.setEventIds(events.stream().map(EventFullDto::getId).collect(Collectors.toSet()));
+            }
+
+            return compilationRepository.save(compilation);
+        });
+
         log.info("Подборка обновлена с id: {}", compId);
 
         return compilationMapper.toDto(updatedCompilation, events);
@@ -99,14 +102,15 @@ public class CompilationServiceImpl implements CompilationService {
     }
 
     @Override
-    @Transactional(readOnly = true)
     public List<CompilationDto> getCompilations(Boolean pinned, Integer from, Integer size) {
         log.info("Получение подборки с pinned={}, from={}, size={}", pinned, from, size);
 
-        Pageable pageable = PageRequest.of(from / size, size);
-        Page<Compilation> compilationsPage = compilationRepository.findByPinned(pinned, pageable);
+        List<Compilation> compilations = transactionTemplate.execute(status -> {
+            Pageable pageable = PageRequest.of(from / size, size);
+            Page<Compilation> compilationsPage = compilationRepository.findByPinned(pinned, pageable);
 
-        List<Compilation> compilations = compilationsPage.getContent();
+            return compilationsPage.getContent();
+        });
 
         Set<Long> allEventIds = compilations.stream()
                 .flatMap(c -> c.getEventIds().stream())
@@ -133,12 +137,11 @@ public class CompilationServiceImpl implements CompilationService {
     }
 
     @Override
-    @Transactional(readOnly = true)
     public CompilationDto getCompilationById(Long compId) {
         log.info("Получение подборки по id: {}", compId);
 
-        Compilation compilation = entityValidator.ensureAndGet(
-                compilationRepository, compId, "Подборка"
+        Compilation compilation = transactionTemplate.execute(status ->
+                entityValidator.ensureAndGet(compilationRepository, compId, "Подборка")
         );
 
         List<EventFullDto> events = eventInternalClient.getEventsByIds(compilation.getEventIds().stream().toList());

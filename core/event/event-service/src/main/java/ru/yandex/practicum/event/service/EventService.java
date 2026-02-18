@@ -6,6 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 import ru.yandex.practicum.client.IternalRequestClient;
 import ru.yandex.practicum.client.StatsClient;
 import ru.yandex.practicum.client.UserAdminClient;
@@ -44,6 +45,7 @@ public class EventService {
     private final HttpServletRequest request;
     private final EntityValidator entityValidator;
     private final IternalRequestClient iternalRequestClient;
+    private final TransactionTemplate transactionTemplate;
 
     public List<EventShortDto> findEvents(UserEventsQuery query) {
         List<EventShortDto> dtos = eventMapper.toEventsShortDto(eventRepository.findByInitiatorId(query.userId(),
@@ -70,27 +72,24 @@ public class EventService {
                 .id(owner.getId()).build();
     }
 
-    @Transactional
     public EventFullDto createEvent(long userId, NewEventDto eventDto) {
         UserShortDto owner = getShortUser(userId);
 
-        if (eventDto.getEventDate() != null) {
-            LocalDateTime now = LocalDateTime.now();
-            if (eventDto.getEventDate().isBefore(now.plusHours(2))) {
-                throw new ValidationException("Event date must be at least 2 hours in the future");
+        return transactionTemplate.execute(status -> {
+            if (eventDto.getEventDate() != null) {
+                LocalDateTime now = LocalDateTime.now();
+                if (eventDto.getEventDate().isBefore(now.plusHours(2))) {
+                    throw new ValidationException("Event date must be at least 2 hours in the future");
+                }
             }
-        }
 
+            Event event = eventMapper.fromNewEventDto(eventDto);
+            event.setInitiatorId(owner.getId());
+            event.setState(EventState.PENDING);
 
-        Event event = eventMapper.fromNewEventDto(eventDto);
-        event.setInitiatorId(owner.getId());
-
-
-        event.setState(EventState.PENDING);
-
-        Event savedItem = eventRepository.save(event);
-
-        return eventMapper.toEventFullDto(savedItem, owner);
+            Event savedItem = eventRepository.save(event);
+            return eventMapper.toEventFullDto(savedItem, owner);
+        });
     }
 
 
@@ -115,35 +114,35 @@ public class EventService {
                 new NotFoundException("Владелец с ID " + userId + " или ивент с ID " + eventId + " не найдены"));
     }
 
-    @Transactional
     public EventFullDto updateUserEvent(Long userId, Long eventId, UpdateEventUserRequest updateRequest) {
-        Event event = findByIdAndUser(eventId, userId);
-        if (event.getState().equals(EventState.PUBLISHED)) {
-            throw new ExistException("Only pending or canceled events can be changed");
-        }
-
-        if (updateRequest.getEventDate() != null) {
-            LocalDateTime now = LocalDateTime.now();
-            if (updateRequest.getEventDate().isBefore(now.plusHours(2))) {
-                throw new ValidationException("Event date must be at least 2 hours in the future");
-            }
-        }
-
-        eventMapper.updateEventFromUserDto(updateRequest, event);
-
-        if (updateRequest.getStateAction() != null) {
-            if (event.getState().equals(EventState.CANCELED) &&
-                    updateRequest.getStateAction().equals(UserStateAction.SEND_TO_REVIEW)) {
-                event.setState(EventState.PENDING);
-            } else if (event.getState().equals(EventState.PENDING) &&
-                    updateRequest.getStateAction().equals(UserStateAction.CANCEL_REVIEW)) {
-                event.setState(EventState.CANCELED);
-            }
-        }
-
         UserShortDto owner = getShortUser(userId);
+        return transactionTemplate.execute(status -> {
+            Event event = findByIdAndUser(eventId, userId);
+            if (event.getState().equals(EventState.PUBLISHED)) {
+                throw new ExistException("Only pending or canceled events can be changed");
+            }
 
-        return eventMapper.toEventFullDto(eventRepository.save(event), owner);
+            if (updateRequest.getEventDate() != null) {
+                LocalDateTime now = LocalDateTime.now();
+                if (updateRequest.getEventDate().isBefore(now.plusHours(2))) {
+                    throw new ValidationException("Event date must be at least 2 hours in the future");
+                }
+            }
+
+            eventMapper.updateEventFromUserDto(updateRequest, event);
+
+            if (updateRequest.getStateAction() != null) {
+                if (event.getState().equals(EventState.CANCELED) &&
+                        updateRequest.getStateAction().equals(UserStateAction.SEND_TO_REVIEW)) {
+                    event.setState(EventState.PENDING);
+                } else if (event.getState().equals(EventState.PENDING) &&
+                        updateRequest.getStateAction().equals(UserStateAction.CANCEL_REVIEW)) {
+                    event.setState(EventState.CANCELED);
+                }
+            }
+
+            return eventMapper.toEventFullDto(eventRepository.save(event), owner);
+        });
     }
 
     public List<EventShortDto> searchPublicEvents(PublicEventFilter filter) {
@@ -222,33 +221,37 @@ public class EventService {
         dtos.forEach(dto -> dto.setConfirmedRequests(confirmedRequestsMap.getOrDefault(dto.getId(), 0L)));
     }
 
-    @Transactional
     public EventFullDto moderateEvent(Long eventId, UpdateEventAdminRequest adminRequest) {
-        Event event = entityValidator.ensureAndGet(eventRepository, eventId, "Event");
 
-        if (adminRequest.getEventDate() != null) {
-            LocalDateTime now = LocalDateTime.now();
-            if (adminRequest.getEventDate().isBefore(now.plusHours(1))) {
-                throw new ExistException("Event date must be at least one hour in the future to publish.");
+        Event eventInitial = entityValidator.ensureAndGet(eventRepository, eventId, "Event");
+
+        UserShortDto owner = getShortUser(eventInitial.getInitiatorId());
+
+        return transactionTemplate.execute(status -> {
+            Event event = entityValidator.ensureAndGet(eventRepository, eventId, "Event");
+
+            if (adminRequest.getEventDate() != null) {
+                LocalDateTime now = LocalDateTime.now();
+                if (adminRequest.getEventDate().isBefore(now.plusHours(1))) {
+                    throw new ExistException("Event date must be at least one hour in the future to publish.");
+                }
             }
-        }
 
-        eventMapper.updateEventFromAdminDto(adminRequest, event);
+            eventMapper.updateEventFromAdminDto(adminRequest, event);
 
-        if (adminRequest.getStateAction() != null) {
-            if (event.getState().equals(EventState.PENDING)) {
-                if (adminRequest.getStateAction().equals(AdminStateAction.PUBLISH_EVENT))
-                    event.setState(EventState.PUBLISHED);
-                if (adminRequest.getStateAction().equals(AdminStateAction.REJECT_EVENT))
-                    event.setState(EventState.CANCELED);
-            } else {
-                throw new ExistException("Cannot publish the event because it's not in the right state: PUBLISHED");
+            if (adminRequest.getStateAction() != null) {
+                if (event.getState().equals(EventState.PENDING)) {
+                    if (adminRequest.getStateAction().equals(AdminStateAction.PUBLISH_EVENT))
+                        event.setState(EventState.PUBLISHED);
+                    if (adminRequest.getStateAction().equals(AdminStateAction.REJECT_EVENT))
+                        event.setState(EventState.CANCELED);
+                } else {
+                    throw new ExistException("Cannot publish the event because it's not in the right state: PUBLISHED");
+                }
             }
-        }
 
-        UserShortDto owner = getShortUser(event.getInitiatorId());
-
-        return eventMapper.toEventFullDto(eventRepository.save(event), owner);
+            return eventMapper.toEventFullDto(eventRepository.save(event), owner);
+        });
     }
 
     private void saveHit() {

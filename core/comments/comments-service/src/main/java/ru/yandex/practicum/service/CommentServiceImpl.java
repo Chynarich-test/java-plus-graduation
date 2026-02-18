@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import ru.yandex.practicum.client.UserAdminClient;
 import ru.yandex.practicum.common.dsl.validator.EntityValidator;
 import ru.yandex.practicum.common.dsl.exception.ValidationException;
@@ -27,26 +28,29 @@ public class CommentServiceImpl implements CommentService {
     private final EntityValidator entityValidator;
     private final UserAdminClient userAdminClient;
     private final EventPublicClient eventPublicClient;
+    private final TransactionTemplate transactionTemplate;
 
-    private void CheckExistsUser(Long userId){
+    private void checkExistsUser(Long userId){
         userAdminClient.getUser(userId);
     }
 
     @Override
-    @Transactional
     public CommentDto addComment(Long userId, Long eventId, NewCommentDto dto) {
         UserDto author = userAdminClient.getUser(userId);
         EventFullDto event = eventPublicClient.findPublicEventById(eventId);
 
-        Comment comment = Comment.builder()
-                .authorId(author.getId())
-                .eventId(event.getId())
-                .text(dto.getText().trim())
-                .createdOn(LocalDateTime.now())
-                .isDeleted(false)
-                .build();
+        Comment savedComment = transactionTemplate.execute(status -> {
+            Comment comment = Comment.builder()
+                    .authorId(author.getId())
+                    .eventId(event.getId())
+                    .text(dto.getText().trim())
+                    .createdOn(LocalDateTime.now())
+                    .isDeleted(false)
+                    .build();
+            return commentRepository.save(comment);
+        });
 
-        return commentMapper.toDto(commentRepository.save(comment), author.getName());
+        return commentMapper.toDto(savedComment, author.getName());
     }
 
     @Override

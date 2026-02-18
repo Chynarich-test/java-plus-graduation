@@ -3,6 +3,7 @@ package ru.yandex.practicum.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import ru.yandex.practicum.client.UserAdminClient;
 import ru.yandex.practicum.common.dsl.validator.EntityValidator;
 import ru.yandex.practicum.common.dsl.exception.ConflictException;
@@ -37,53 +38,53 @@ public class RequestServiceImpl implements RequestService {
     private final RequestMapper mapper;
     private final EntityValidator entityValidator;
     private final EventInternalClient eventInternalClient;
+    private final TransactionTemplate transactionTemplate;
 
-    private void CheckExistsUser(Long userId){
+    private void checkExistsUser(Long userId){
         userAdminClient.getUser(userId);
     }
 
     @Override
     public List<RequestDto> getUserRequests(Long userId) {
-        CheckExistsUser(userId);
+        checkExistsUser(userId);
         List<Request> requests = requestRepository.findAllByRequesterId(userId);
         return mapper.toDtoList(requests);
     }
 
     @Override
-    @Transactional
     public RequestDto createRequest(Long userId, Long eventId) {
-        CheckExistsUser(userId);
+        checkExistsUser(userId);
         EventFullDto event = eventInternalClient.getEventsByIds(List.of(eventId)).getFirst();
 
-        if (Objects.equals(event.getInitiator().getId(), userId)) {
-            throw new ValidationException("Инициатор события не может создать заявку на участие в своём же событии");
-        }
+        Request saved = transactionTemplate.execute(status -> {
+            if (Objects.equals(event.getInitiator().getId(), userId)) {
+                throw new ValidationException("Инициатор события не может создать заявку на участие в своём же событии");
+            }
 
-        if (event.getState() == null || event.getState() != EventState.PUBLISHED) {
-            throw new ValidationException("Нельзя добавить заявку: событие не опубликовано");
-        }
+            if (event.getState() == null || event.getState() != EventState.PUBLISHED) {
+                throw new ValidationException("Нельзя добавить заявку: событие не опубликовано");
+            }
 
-        if (requestRepository.existsByEventIdAndRequesterId(eventId, userId)) {
-            throw new ExistException("Заявка от этого пользователя на это событие уже существует");
-        }
+            if (requestRepository.existsByEventIdAndRequesterId(eventId, userId)) {
+                throw new ExistException("Заявка от этого пользователя на это событие уже существует");
+            }
 
-        long confirmed = requestRepository.countConfirmedRequests(eventId);
-        Integer limit = event.getParticipantLimit();
-        if (limit != null && limit > 0 && confirmed >= limit) {
-            throw new ConflictException("Достигнут лимит участников события");
-        }
+            long confirmed = requestRepository.countConfirmedRequests(eventId);
+            Integer limit = event.getParticipantLimit();
+            if (limit != null && limit > 0 && confirmed >= limit) {
+                throw new ConflictException("Достигнут лимит участников события");
+            }
 
-        RequestStatus initialStatus = RequestStatus.PENDING;
-        if (!event.isRequestModeration() || limit == null || limit == 0) {
-            initialStatus = RequestStatus.CONFIRMED;
-        }
+            RequestStatus initialStatus = RequestStatus.PENDING;
+            if (!event.isRequestModeration() || limit == null || limit == 0) {
+                initialStatus = RequestStatus.CONFIRMED;
+            }
 
-        Request request = mapper.toNewEntity(event.getId(), userId, initialStatus);
+            Request request = mapper.toNewEntity(event.getId(), userId, initialStatus);
+            request.setCreated(LocalDateTime.now().truncatedTo(ChronoUnit.MICROS));
 
-        LocalDateTime creationTime = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
-        request.setCreated(creationTime);
-
-        Request saved = requestRepository.save(request);
+            return requestRepository.save(request);
+        });
 
         return mapper.toDto(saved);
     }
@@ -104,7 +105,7 @@ public class RequestServiceImpl implements RequestService {
 
     @Override
     public List<RequestDto> getEventRequests(Long userId, Long eventId) {
-        CheckExistsUser(userId);
+        checkExistsUser(userId);
         EventFullDto event = eventPublicClient.findPublicEventById(eventId);
 
         if (!Objects.equals(event.getInitiator().getId(), userId)) {
@@ -116,95 +117,96 @@ public class RequestServiceImpl implements RequestService {
     }
 
     @Override
-    @Transactional
     public EventRequestStatusUpdateResult changeRequestStatus(Long userId, Long eventId,
                                                               EventRequestStatusUpdateRequest updateRequest) {
-        CheckExistsUser(userId);
+        checkExistsUser(userId);
         EventFullDto event = eventPublicClient.findPublicEventById(eventId);
 
-        if (!Objects.equals(event.getInitiator().getId(), userId)) {
-            throw new ValidationException("Только инициатор может менять статусы заявок");
-        }
+        return transactionTemplate.execute(status -> {
+            if (!Objects.equals(event.getInitiator().getId(), userId)) {
+                throw new ValidationException("Только инициатор может менять статусы заявок");
+            }
 
-        String statusStr = Optional.ofNullable(updateRequest.getStatus())
-                .orElse("")
-                .toUpperCase(Locale.ROOT);
-        RequestStatus targetStatus;
-        try {
-            targetStatus = RequestStatus.valueOf(statusStr);
-        } catch (IllegalArgumentException ex) {
-            throw new ValidationException("Недопустимый статус: " + updateRequest.getStatus());
-        }
+            String statusStr = Optional.ofNullable(updateRequest.getStatus())
+                    .orElse("")
+                    .toUpperCase(Locale.ROOT);
+            RequestStatus targetStatus;
+            try {
+                targetStatus = RequestStatus.valueOf(statusStr);
+            } catch (IllegalArgumentException ex) {
+                throw new ValidationException("Недопустимый статус: " + updateRequest.getStatus());
+            }
 
-        if (!(targetStatus == RequestStatus.CONFIRMED || targetStatus == RequestStatus.REJECTED)) {
-            throw new ValidationException("Можно массово устанавливать только CONFIRMED или REJECTED");
-        }
+            if (!(targetStatus == RequestStatus.CONFIRMED || targetStatus == RequestStatus.REJECTED)) {
+                throw new ValidationException("Можно массово устанавливать только CONFIRMED или REJECTED");
+            }
 
-        List<Long> ids = Optional.ofNullable(updateRequest.getRequestIds())
-                .orElse(Collections.emptyList());
+            List<Long> ids = Optional.ofNullable(updateRequest.getRequestIds())
+                    .orElse(Collections.emptyList());
 
-        if (ids.isEmpty()) {
+            if (ids.isEmpty()) {
+                return EventRequestStatusUpdateResult.builder()
+                        .confirmedRequests(Collections.emptyList())
+                        .rejectedRequests(Collections.emptyList())
+                        .build();
+            }
+
+            List<Request> requests = requestRepository.findByEventIdAndIdInWithRelations(eventId, ids);
+
+            long confirmedNow = requestRepository.countConfirmedRequests(eventId);
+            Integer limit = event.getParticipantLimit();
+
+            if (targetStatus == RequestStatus.CONFIRMED && limit != null && limit > 0) {
+                long pendingToConfirm = requests.stream()
+                        .filter(r -> r.getStatus() == RequestStatus.PENDING)
+                        .count();
+                long available = limit - confirmedNow;
+                if (available <= 0 || pendingToConfirm > available) {
+                    throw new ConflictException("Достигнут лимит участников события");
+                }
+            }
+
+            if (targetStatus == RequestStatus.REJECTED) {
+                boolean anyNonPending = requests.stream()
+                        .anyMatch(r -> r.getStatus() != RequestStatus.PENDING);
+                if (anyNonPending) {
+                    throw new ConflictException("Нельзя отклонить заявку: она уже обработана");
+                }
+            }
+
+            List<Request> confirmed = new ArrayList<>();
+            List<Request> rejected = new ArrayList<>();
+
+            if (targetStatus == RequestStatus.CONFIRMED) {
+                for (Request req : requests) {
+                    if (req.getStatus() != RequestStatus.PENDING) continue;
+
+                    if (limit == null || limit == 0 || confirmedNow < limit) {
+                        req.setStatus(RequestStatus.CONFIRMED);
+                        confirmedNow++;
+                        confirmed.add(req);
+                    } else {
+                        req.setStatus(RequestStatus.REJECTED);
+                        rejected.add(req);
+                    }
+                }
+            } else {
+                for (Request req : requests) {
+                    if (req.getStatus() == RequestStatus.PENDING) {
+                        req.setStatus(RequestStatus.REJECTED);
+                        rejected.add(req);
+                    }
+                }
+            }
+
+            confirmed.forEach(requestRepository::save);
+            rejected.forEach(requestRepository::save);
+
             return EventRequestStatusUpdateResult.builder()
-                    .confirmedRequests(Collections.emptyList())
-                    .rejectedRequests(Collections.emptyList())
+                    .confirmedRequests(mapper.toDtoList(confirmed))
+                    .rejectedRequests(mapper.toDtoList(rejected))
                     .build();
-        }
-
-        List<Request> requests = requestRepository.findByEventIdAndIdInWithRelations(eventId, ids);
-
-        long confirmedNow = requestRepository.countConfirmedRequests(eventId);
-        Integer limit = event.getParticipantLimit();
-
-        if (targetStatus == RequestStatus.CONFIRMED && limit != null && limit > 0) {
-            long pendingToConfirm = requests.stream()
-                    .filter(r -> r.getStatus() == RequestStatus.PENDING)
-                    .count();
-            long available = limit - confirmedNow;
-            if (available <= 0 || pendingToConfirm > available) {
-                throw new ConflictException("Достигнут лимит участников события");
-            }
-        }
-
-        if (targetStatus == RequestStatus.REJECTED) {
-            boolean anyNonPending = requests.stream()
-                    .anyMatch(r -> r.getStatus() != RequestStatus.PENDING);
-            if (anyNonPending) {
-                throw new ConflictException("Нельзя отклонить заявку: она уже обработана");
-            }
-        }
-
-        List<Request> confirmed = new ArrayList<>();
-        List<Request> rejected = new ArrayList<>();
-
-        if (targetStatus == RequestStatus.CONFIRMED) {
-            for (Request req : requests) {
-                if (req.getStatus() != RequestStatus.PENDING) continue;
-
-                if (limit == null || limit == 0 || confirmedNow < limit) {
-                    req.setStatus(RequestStatus.CONFIRMED);
-                    confirmedNow++;
-                    confirmed.add(req);
-                } else {
-                    req.setStatus(RequestStatus.REJECTED);
-                    rejected.add(req);
-                }
-            }
-        } else {
-            for (Request req : requests) {
-                if (req.getStatus() == RequestStatus.PENDING) {
-                    req.setStatus(RequestStatus.REJECTED);
-                    rejected.add(req);
-                }
-            }
-        }
-
-        confirmed.forEach(requestRepository::save);
-        rejected.forEach(requestRepository::save);
-
-        return EventRequestStatusUpdateResult.builder()
-                .confirmedRequests(mapper.toDtoList(confirmed))
-                .rejectedRequests(mapper.toDtoList(rejected))
-                .build();
+        });
     }
 
     @Override
