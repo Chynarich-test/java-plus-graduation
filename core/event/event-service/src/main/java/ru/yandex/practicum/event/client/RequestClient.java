@@ -1,11 +1,14 @@
-package ru.yandex.practicum.client;
+package ru.yandex.practicum.event.client;
 
+import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.*;
+import ru.yandex.practicum.common.dsl.exception.decode.FeignClientConfiguration;
 import ru.yandex.practicum.dto.*;
 
 import java.util.List;
 
-public interface IternalRequestOperations {
+@FeignClient(name = "request-service", path = "/internal/requests", configuration = FeignClientConfiguration.class)
+public interface RequestClient{
     @GetMapping("/confirmed-counts")
     List<ConfirmedRequestCount> getConfirmedCounts(@RequestParam("eventIds") List<Long> eventIds,
                                                    @RequestParam("status") RequestStatus status);

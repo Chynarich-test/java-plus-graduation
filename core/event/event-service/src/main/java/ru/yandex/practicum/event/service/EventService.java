@@ -1,15 +1,14 @@
 package ru.yandex.practicum.event.service;
 
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
-import ru.yandex.practicum.client.IternalRequestClient;
+import ru.yandex.practicum.event.client.RequestClient;
 import ru.yandex.practicum.client.StatsClient;
-import ru.yandex.practicum.client.UserAdminClient;
+import ru.yandex.practicum.event.client.UserClient;
 import ru.yandex.practicum.common.dsl.validator.EntityValidator;
 import ru.yandex.practicum.dto.*;
 import ru.yandex.practicum.event.dao.EventRepository;
@@ -40,11 +39,11 @@ import java.util.stream.Collectors;
 public class EventService {
     private final EventRepository eventRepository;
     private final EventMapper eventMapper;
-    private final UserAdminClient userAdminClient;
+    private final UserClient userClient;
     private final StatsClient statsClient;
     private final HttpServletRequest request;
     private final EntityValidator entityValidator;
-    private final IternalRequestClient iternalRequestClient;
+    private final RequestClient requestClient;
     private final TransactionTemplate transactionTemplate;
 
     public List<EventShortDto> findEvents(UserEventsQuery query) {
@@ -66,7 +65,7 @@ public class EventService {
     }
 
     private UserShortDto getShortUser(long userId){
-        UserDto owner = userAdminClient.getUser(userId);
+        UserDto owner = userClient.getUser(userId);
         return UserShortDto.builder()
                 .name(owner.getName())
                 .id(owner.getId()).build();
@@ -213,7 +212,7 @@ public class EventService {
                 .toList();
 
         List<ConfirmedRequestCount> requestCounts =
-                iternalRequestClient.getConfirmedCounts(eventIds, RequestStatus.CONFIRMED);
+                requestClient.getConfirmedCounts(eventIds, RequestStatus.CONFIRMED);
 
         Map<Long, Long> confirmedRequestsMap = requestCounts.stream()
                 .collect(Collectors.toMap(ConfirmedRequestCount::getEventId, ConfirmedRequestCount::getCount));
@@ -289,11 +288,11 @@ public class EventService {
     }
 
     public List<RequestDto> getEventRequests(Long userId, Long eventId) {
-        return iternalRequestClient.getEventRequests(userId, eventId);
+        return requestClient.getEventRequests(userId, eventId);
     }
 
     public EventRequestStatusUpdateResult changeRequestStatus(Long userId, Long eventId, EventRequestStatusUpdateRequest request) {
-        return iternalRequestClient.updateStatuses(userId, eventId, request);
+        return requestClient.updateStatuses(userId, eventId, request);
     }
 
     public List<EventFullDto> findAllById(List<Long> ids){

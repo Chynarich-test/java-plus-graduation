@@ -1,10 +1,10 @@
 package ru.yandex.practicum.event.controller;
 
+import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
-import ru.yandex.practicum.event.client.EventAdminOperations;
 import ru.yandex.practicum.event.dto.EventFullDto;
 import ru.yandex.practicum.event.dto.UpdateEventAdminRequest;
 import ru.yandex.practicum.event.dto.request.AdminEventFilter;
@@ -17,19 +17,19 @@ import java.util.List;
 @Slf4j
 @Validated
 @AllArgsConstructor
-public class AdminEventController implements EventAdminOperations {
+public class AdminEventController {
     private final EventService eventService;
 
-    @Override
+    @GetMapping
     public List<EventFullDto> searchEventsByAdmin(
-            AdminEventFilter filter) {
+            @Valid AdminEventFilter filter) {
         return eventService.searchEventsByAdmin(filter);
     }
 
-    @Override
+    @PatchMapping("/{eventId}")
     public EventFullDto moderateEvent(
-            Long eventId,
-            UpdateEventAdminRequest adminRequest) {
+            @PathVariable Long eventId,
+            @RequestBody @Valid UpdateEventAdminRequest adminRequest) {
         return eventService.moderateEvent(eventId, adminRequest);
     }
 }

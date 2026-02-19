@@ -1,13 +1,16 @@
 package ru.yandex.practicum.event.controller;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import ru.yandex.practicum.dto.EventRequestStatusUpdateRequest;
 import ru.yandex.practicum.dto.EventRequestStatusUpdateResult;
 import ru.yandex.practicum.dto.RequestDto;
-import ru.yandex.practicum.event.client.EventPrivateOperations;
 import ru.yandex.practicum.event.dto.EventFullDto;
 import ru.yandex.practicum.event.dto.EventShortDto;
 import ru.yandex.practicum.event.dto.NewEventDto;
@@ -22,47 +25,48 @@ import java.util.List;
 @Slf4j
 @Validated
 @AllArgsConstructor
-public class PrivateEventController implements EventPrivateOperations {
+public class PrivateEventController{
     private final EventService eventService;
 
-    @Override
-    public List<EventShortDto> findUserEvents(long userId,
-                                              Integer from,
-                                              Integer size) {
+    @GetMapping
+    public List<EventShortDto> findUserEvents(@PathVariable long userId,
+                                              @PositiveOrZero @RequestParam(name = "from", defaultValue = "0") Integer from,
+                                              @Positive @RequestParam(name = "size", defaultValue = "10") Integer size) {
         UserEventsQuery query = new UserEventsQuery(userId, from, size);
         return eventService.findEvents(query);
     }
 
-    @Override
-    public EventFullDto createEvent(long userId,
-                                    NewEventDto eventDto) {
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public EventFullDto createEvent(@PathVariable long userId,
+                                    @Valid @RequestBody NewEventDto eventDto) {
         return eventService.createEvent(userId, eventDto);
     }
 
-    @Override
-    public EventFullDto findUserEventById(long userId,
-                                          long eventId) {
+    @GetMapping("/{eventId}")
+    public EventFullDto findUserEventById(@PathVariable long userId,
+                                          @PathVariable long eventId) {
         return eventService.findUserEventById(userId, eventId);
     }
 
-    @Override
+    @PatchMapping("/{eventId}")
     public EventFullDto updateUserEvent(
-            Long userId,
-            Long eventId,
-            UpdateEventUserRequest updateRequest) {
+            @PathVariable Long userId,
+            @PathVariable Long eventId,
+            @RequestBody @Valid UpdateEventUserRequest updateRequest) {
         return eventService.updateUserEvent(userId, eventId, updateRequest);
     }
 
-    @Override
-    public List<RequestDto> getEventRequests(Long userId,
-                                             Long eventId) {
+    @GetMapping("/{eventId}/requests")
+    public List<RequestDto> getEventRequests(@PathVariable Long userId,
+                                             @PathVariable Long eventId) {
         return eventService.getEventRequests(userId, eventId);
     }
 
-    @Override
-    public EventRequestStatusUpdateResult updateStatuses(Long userId,
-                                                         Long eventId,
-                                                         EventRequestStatusUpdateRequest request) {
+    @PatchMapping("/{eventId}/requests")
+    public EventRequestStatusUpdateResult updateStatuses(@PathVariable Long userId,
+                                                         @PathVariable Long eventId,
+                                                         @RequestBody EventRequestStatusUpdateRequest request) {
         return eventService.changeRequestStatus(userId, eventId, request);
     }
 }

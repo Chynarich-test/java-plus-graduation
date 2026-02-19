@@ -5,11 +5,11 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
-import ru.yandex.practicum.client.UserAdminClient;
+import ru.yandex.practicum.client.EventClient;
+import ru.yandex.practicum.client.UserClient;
 import ru.yandex.practicum.common.dsl.validator.EntityValidator;
 import ru.yandex.practicum.common.dsl.exception.ValidationException;
 import ru.yandex.practicum.dto.*;
-import ru.yandex.practicum.event.client.EventPublicClient;
 import ru.yandex.practicum.event.dto.EventFullDto;
 import ru.yandex.practicum.mapper.CommentMapper;
 import ru.yandex.practicum.model.Comment;
@@ -26,18 +26,18 @@ public class CommentServiceImpl implements CommentService {
     private final CommentRepository commentRepository;
     private final CommentMapper commentMapper;
     private final EntityValidator entityValidator;
-    private final UserAdminClient userAdminClient;
-    private final EventPublicClient eventPublicClient;
+    private final UserClient userClient;
+    private final EventClient eventClient;
     private final TransactionTemplate transactionTemplate;
 
     private void checkExistsUser(Long userId){
-        userAdminClient.getUser(userId);
+        userClient.getUser(userId);
     }
 
     @Override
     public CommentDto addComment(Long userId, Long eventId, NewCommentDto dto) {
-        UserDto author = userAdminClient.getUser(userId);
-        EventFullDto event = eventPublicClient.findPublicEventById(eventId);
+        UserDto author = userClient.getUser(userId);
+        EventFullDto event = eventClient.findPublicEventById(eventId);
 
         Comment savedComment = transactionTemplate.execute(status -> {
             Comment comment = Comment.builder()

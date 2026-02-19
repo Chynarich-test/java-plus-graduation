@@ -8,16 +8,14 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
+import ru.yandex.practicum.client.EventClient;
 import ru.yandex.practicum.common.dsl.validator.EntityValidator;
 import ru.yandex.practicum.common.dsl.exception.ConflictException;
 import ru.yandex.practicum.common.dsl.exception.NotFoundException;
 import ru.yandex.practicum.dto.CompilationDto;
 import ru.yandex.practicum.dto.NewCompilationDto;
 import ru.yandex.practicum.dto.UpdateCompilationRequest;
-import ru.yandex.practicum.event.client.EventInternalClient;
-import ru.yandex.practicum.event.client.EventPrivateClient;
 import ru.yandex.practicum.event.dto.EventFullDto;
-import ru.yandex.practicum.event.dto.EventShortDto;
 import ru.yandex.practicum.mapper.CompilationMapper;
 import ru.yandex.practicum.model.Compilation;
 import ru.yandex.practicum.repository.CompilationRepository;
@@ -33,7 +31,7 @@ public class CompilationServiceImpl implements CompilationService {
     private final CompilationRepository compilationRepository;
     private final CompilationMapper compilationMapper;
     private final EntityValidator entityValidator;
-    private final EventInternalClient eventInternalClient;
+    private final EventClient eventClient;
     private final TransactionTemplate transactionTemplate;
 
     @Override
@@ -119,7 +117,7 @@ public class CompilationServiceImpl implements CompilationService {
 
         Map<Long, EventFullDto> eventsMap = new HashMap<>();
         if (!allEventIds.isEmpty()) {
-            eventsMap = eventInternalClient.getEventsByIds(new ArrayList<>(allEventIds))
+            eventsMap = eventClient.getEventsByIds(new ArrayList<>(allEventIds))
                     .stream()
                     .collect(Collectors.toMap(EventFullDto::getId, e -> e));
         }
@@ -144,7 +142,7 @@ public class CompilationServiceImpl implements CompilationService {
                 entityValidator.ensureAndGet(compilationRepository, compId, "Подборка")
         );
 
-        List<EventFullDto> events = eventInternalClient.getEventsByIds(compilation.getEventIds().stream().toList());
+        List<EventFullDto> events = eventClient.getEventsByIds(compilation.getEventIds().stream().toList());
 
         return compilationMapper.toDto(compilation, events);
     }
@@ -154,7 +152,7 @@ public class CompilationServiceImpl implements CompilationService {
             return List.of();
         }
 
-        List<EventFullDto> events = eventInternalClient.getEventsByIds(eventIds);
+        List<EventFullDto> events = eventClient.getEventsByIds(eventIds);
 
         // Проверяем, что все события найдены
         if (events.size() != eventIds.size()) {

@@ -3,11 +3,8 @@ package ru.yandex.practicum.event.controller;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-import ru.yandex.practicum.event.client.EventInternalOperations;
+import org.springframework.web.bind.annotation.*;
 import ru.yandex.practicum.event.dto.EventFullDto;
-import ru.yandex.practicum.event.dto.EventShortDto;
 import ru.yandex.practicum.event.service.EventService;
 
 import java.util.List;
@@ -17,11 +14,16 @@ import java.util.List;
 @Slf4j
 @Validated
 @AllArgsConstructor
-public class IternalEventController implements EventInternalOperations {
+public class IternalEventController{
     private final EventService eventService;
 
-    @Override
-    public List<EventFullDto> getEventsByIds(List<Long> ids) {
+    @GetMapping
+    public List<EventFullDto> getEventsByIds(@RequestParam List<Long> ids) {
         return eventService.findAllById(ids);
+    }
+
+    @GetMapping("/{id}")
+    public EventFullDto findPublicEventById(@PathVariable long id) {
+        return eventService.findPublicEventById(id);
     }
 }

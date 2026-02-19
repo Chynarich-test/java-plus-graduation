@@ -4,7 +4,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
-import ru.yandex.practicum.client.UserAdminClient;
+import ru.yandex.practicum.client.EventClient;
+import ru.yandex.practicum.client.UserClient;
 import ru.yandex.practicum.common.dsl.validator.EntityValidator;
 import ru.yandex.practicum.common.dsl.exception.ConflictException;
 import ru.yandex.practicum.common.dsl.exception.ExistException;
@@ -14,8 +15,6 @@ import ru.yandex.practicum.dto.ConfirmedRequestCount;
 import ru.yandex.practicum.dto.EventRequestStatusUpdateRequest;
 import ru.yandex.practicum.dto.EventRequestStatusUpdateResult;
 import ru.yandex.practicum.dto.RequestDto;
-import ru.yandex.practicum.event.client.EventInternalClient;
-import ru.yandex.practicum.event.client.EventPublicClient;
 import ru.yandex.practicum.event.dto.EventFullDto;
 import ru.yandex.practicum.event.dto.enums.EventState;
 import ru.yandex.practicum.mapper.RequestMapper;
@@ -33,15 +32,14 @@ import java.util.*;
 public class RequestServiceImpl implements RequestService {
 
     private final RequestRepository requestRepository;
-    private final UserAdminClient userAdminClient;
-    private final EventPublicClient eventPublicClient;
+    private final UserClient userClient;
+    private final EventClient eventClient;
     private final RequestMapper mapper;
     private final EntityValidator entityValidator;
-    private final EventInternalClient eventInternalClient;
     private final TransactionTemplate transactionTemplate;
 
     private void checkExistsUser(Long userId){
-        userAdminClient.getUser(userId);
+        userClient.getUser(userId);
     }
 
     @Override
@@ -54,7 +52,7 @@ public class RequestServiceImpl implements RequestService {
     @Override
     public RequestDto createRequest(Long userId, Long eventId) {
         checkExistsUser(userId);
-        EventFullDto event = eventInternalClient.getEventsByIds(List.of(eventId)).getFirst();
+        EventFullDto event = eventClient.getEventsByIds(List.of(eventId)).getFirst();
 
         Request saved = transactionTemplate.execute(status -> {
             if (Objects.equals(event.getInitiator().getId(), userId)) {
@@ -106,7 +104,7 @@ public class RequestServiceImpl implements RequestService {
     @Override
     public List<RequestDto> getEventRequests(Long userId, Long eventId) {
         checkExistsUser(userId);
-        EventFullDto event = eventPublicClient.findPublicEventById(eventId);
+        EventFullDto event = eventClient.findPublicEventById(eventId);
 
         if (!Objects.equals(event.getInitiator().getId(), userId)) {
             throw new NotFoundException("Только инициатор может просматривать заявки данного события");
@@ -120,7 +118,7 @@ public class RequestServiceImpl implements RequestService {
     public EventRequestStatusUpdateResult changeRequestStatus(Long userId, Long eventId,
                                                               EventRequestStatusUpdateRequest updateRequest) {
         checkExistsUser(userId);
-        EventFullDto event = eventPublicClient.findPublicEventById(eventId);
+        EventFullDto event = eventClient.findPublicEventById(eventId);
 
         return transactionTemplate.execute(status -> {
             if (!Objects.equals(event.getInitiator().getId(), userId)) {
