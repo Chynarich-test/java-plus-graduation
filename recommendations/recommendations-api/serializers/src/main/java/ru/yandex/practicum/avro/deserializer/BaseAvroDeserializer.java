@@ -9,6 +9,7 @@ import org.apache.avro.specific.SpecificRecordBase;
 import org.apache.kafka.common.serialization.Deserializer;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 
 public class BaseAvroDeserializer<T extends SpecificRecordBase> implements Deserializer<T> {
     private final DecoderFactory decoderFactory;
@@ -27,11 +28,15 @@ public class BaseAvroDeserializer<T extends SpecificRecordBase> implements Deser
     @Override
     public T deserialize(String topic, byte[] data) {
         try {
-            if (data != null) {
-                BinaryDecoder decoder = decoderFactory.binaryDecoder(data, null);
-                return this.reader.read(null, decoder);
-            }
-            return null;
+            ByteBuffer buffer = ByteBuffer.wrap(data);
+
+            short schemaNameLength = buffer.getShort();
+
+            buffer.position(buffer.position() + schemaNameLength);
+
+            BinaryDecoder decoder = decoderFactory.binaryDecoder(
+                    data, buffer.position(), buffer.remaining(), null);
+            return this.reader.read(null, decoder);
         } catch (IOException e) {
             throw new RuntimeException("Ошибка десериализации данных из топика " + topic, e);
         }
