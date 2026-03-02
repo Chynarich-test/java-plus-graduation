@@ -4,10 +4,7 @@ import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import ru.yandex.practicum.event.dto.EventFullDto;
 import ru.yandex.practicum.event.dto.EventShortDto;
 import ru.yandex.practicum.event.dto.request.PublicEventFilter;
@@ -29,7 +26,20 @@ public class PublicEventController{
     }
 
     @GetMapping("/{id}")
-    public EventFullDto findPublicEventById(@PathVariable long id) {
-        return eventService.findPublicEventById(id);
+    public EventFullDto findPublicEventById(@PathVariable long id,
+                                            @RequestHeader(value = "X-EWM-USER-ID", required = false) Long userId) {
+        return eventService.findPublicEventById(id, userId);
     }
+
+    @GetMapping("/recommendations")
+    public List<EventFullDto> getRecommendations(@RequestHeader("X-EWM-USER-ID") long userId) {
+        return eventService.getRecommendations(userId);
+    }
+
+    @PutMapping("/{eventId}/like")
+    public void likeEvent(@PathVariable long eventId,
+                          @RequestHeader("X-EWM-USER-ID") long userId) {
+        eventService.likeEvent(eventId, userId);
+    }
+
 }

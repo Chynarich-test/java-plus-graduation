@@ -1,13 +1,15 @@
 package ru.yandex.practicum.event.service;
 
 import jakarta.servlet.http.HttpServletRequest;
-import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
+import ru.yandex.practicum.client.AnalyzerClient;
+import ru.yandex.practicum.client.CollectorClient;
 import ru.yandex.practicum.event.client.RequestClient;
-import ru.yandex.practicum.client.StatsClient;
 import ru.yandex.practicum.event.client.UserClient;
 import ru.yandex.practicum.common.dsl.validator.EntityValidator;
 import ru.yandex.practicum.dto.*;
@@ -26,6 +28,7 @@ import ru.yandex.practicum.common.dsl.exception.ExistException;
 import ru.yandex.practicum.common.dsl.exception.InvalidDateRangeException;
 import ru.yandex.practicum.common.dsl.exception.NotFoundException;
 import ru.yandex.practicum.common.dsl.exception.ValidationException;
+import ru.yandex.practicum.grpc.event.recommendation.RecommendedEventProto;
 
 import java.time.LocalDateTime;
 import java.util.Comparator;
@@ -34,32 +37,27 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
-@AllArgsConstructor
+@RequiredArgsConstructor
 @Slf4j
 public class EventService {
     private final EventRepository eventRepository;
     private final EventMapper eventMapper;
     private final UserClient userClient;
-    private final StatsClient statsClient;
     private final HttpServletRequest request;
     private final EntityValidator entityValidator;
     private final RequestClient requestClient;
     private final TransactionTemplate transactionTemplate;
+    private final CollectorClient collectorClient;
+    private final AnalyzerClient analyzerClient;
+
+    @Value("${app.recommendations.max-results}")
+    private int maxResults;
 
     public List<EventShortDto> findEvents(UserEventsQuery query) {
         List<EventShortDto> dtos = eventMapper.toEventsShortDto(eventRepository.findByInitiatorId(query.userId(),
                 PageRequest.of(query.from() / query.size(), query.size())));
 
-        if (dtos != null && !dtos.isEmpty()) {
-            List<String> uris = dtos.stream()
-                    .map(d -> "/events/" + d.getId())
-                    .collect(Collectors.toList());
-            saveHit();
-            Map<String, Long> hits = fetchHitsForUris(uris);
-            for (EventShortDto dto : dtos) {
-                dto.setViews(hits.getOrDefault("/events/" + dto.getId(), 0L));
-            }
-        }
+        enrichShortWithRatings(dtos);
 
         return dtos;
     }
@@ -95,11 +93,7 @@ public class EventService {
     public EventFullDto findUserEventById(long userId, long eventId) {
         UserShortDto owner = getShortUser(userId);
         EventFullDto dto = eventMapper.toEventFullDto(findByIdAndUser(eventId, userId), owner);
-        if (dto != null) {
-            String uri = "/events/" + dto.getId();
-            Map<String, Long> hits = fetchHitsForUris(List.of(uri));
-            dto.setViews(hits.getOrDefault(uri, 0L));
-        }
+        enrichFullWithRatings(List.of(dto));
         return dto;
     }
 
@@ -153,36 +147,27 @@ public class EventService {
 
         List<EventShortDto> dtos = eventMapper.toEventsShortDto(eventRepository.searchEventsByPublic(filter));
 
-        if (dtos != null && !dtos.isEmpty()) {
-            List<String> uris = dtos.stream().map(d -> "/events/" + d.getId()).collect(Collectors.toList());
-            Map<String, Long> hits = fetchHitsForUris(uris);
-            for (EventShortDto dto : dtos) {
-                dto.setViews(hits.getOrDefault("/events/" + dto.getId(), 0L));
-            }
-        }
+        enrichShortWithRatings(dtos);
 
-        saveHit();
-
-        if (filter.getSort() != null && filter.getSort() == EventSort.VIEWS) {
-            dtos.sort(Comparator.comparing(EventShortDto::getViews).reversed());
+        if (filter.getSort() != null && filter.getSort() == EventSort.RATING) {
+            dtos.sort(Comparator.comparing(EventShortDto::getRating).reversed());
         }
 
         return dtos;
     }
 
-    public EventFullDto findPublicEventById(long id) {
+    public EventFullDto findPublicEventById(long id, Long userId) {
         Event event = findByPublicId(id);
 
         UserShortDto owner = getShortUser(event.getInitiatorId());
 
-
         EventFullDto dto = eventMapper.toEventFullDto(event, owner);
-        if (dto != null) {
-            saveHit();
-            String uri = "/events/" + dto.getId();
-            Map<String, Long> hits = fetchHitsForUris(List.of(uri));
-            dto.setViews(hits.getOrDefault(uri, 0L));
+
+        if (userId != null && userId > 0) {
+            collectorClient.collectUserAction(userId, id, UserActionType.VIEW);
         }
+
+        enrichFullWithRatings(List.of(dto));
 
         return dto;
     }
@@ -192,16 +177,7 @@ public class EventService {
 
         setConfirmedRequestsForEvents(dtos);
 
-        if (dtos != null && !dtos.isEmpty()) {
-            List<String> uris = dtos.stream()
-                    .map(d -> "/events/" + d.getId())
-                    .collect(Collectors.toList());
-            Map<String, Long> hits = fetchHitsForUris(uris);
-            for (EventFullDto dto : dtos) {
-                dto.setViews(hits.getOrDefault("/events/" + dto.getId(), 0L));
-            }
-        }
-
+        enrichFullWithRatings(dtos);
 
         return dtos;
     }
@@ -253,39 +229,7 @@ public class EventService {
         });
     }
 
-    private void saveHit() {
-        try {
-            EndpointHitDto hitDto = EndpointHitDto.builder()
-                    .app("ewm-main-service")
-                    .uri(request.getRequestURI())
-                    .ip(request.getRemoteAddr())
-                    .timestamp(LocalDateTime.now())
-                    .build();
 
-            statsClient.saveHit(hitDto);
-        } catch (Exception e) {
-            log.error("Не удалось отправить информацию о просмотре в сервис статистики: {}", e.getMessage());
-        }
-    }
-
-    private Map<String, Long> fetchHitsForUris(List<String> uris) {
-        try {
-            LocalDateTime start = LocalDateTime.now().minusYears(10);
-            LocalDateTime end = LocalDateTime.now().plusDays(1);
-            List<ViewStatsDto> stats = statsClient.getStats(StatsRequest.builder()
-                    .start(start)
-                    .end(end)
-                    .uris(uris)
-                    .unique(true)
-                    .build());
-            if (stats == null || stats.isEmpty()) return Map.of();
-            return stats.stream().collect(Collectors.toMap(
-                    ViewStatsDto::getUri, v -> v.getHits() == null ? 0L : v.getHits()));
-        } catch (Exception e) {
-            log.error("Не удалось получить просмотры из сервиса статистики: {}", e.getMessage());
-            return Map.of();
-        }
-    }
 
     public List<RequestDto> getEventRequests(Long userId, Long eventId) {
         return requestClient.getEventRequests(userId, eventId);
@@ -297,5 +241,110 @@ public class EventService {
 
     public List<EventFullDto> findAllById(List<Long> ids){
         return eventMapper.toEventsFullDto(eventRepository.findAllById(ids));
+    }
+
+    public List<EventFullDto> getRecommendations(long userId) {
+        List<RecommendedEventProto> recommendations = analyzerClient.getRecommendationsForUser(userId, maxResults).toList();
+
+        if (recommendations.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> eventIds = recommendations.stream()
+                .map(RecommendedEventProto::getEventId)
+                .toList();
+
+        List<Event> events = eventRepository.findAllById(eventIds);
+
+        List<Long> initiatorIds = events.stream()
+                .map(Event::getInitiatorId)
+                .distinct()
+                .toList();
+
+        Map<Long, UserShortDto> usersMap = userClient.getUsers(initiatorIds, 0, initiatorIds.size()).stream()
+                .collect(Collectors.toMap(
+                        UserDto::getId,
+                        u -> UserShortDto.builder().id(u.getId()).name(u.getName()).build()
+                ));
+
+        Map<Long, Double> scores = recommendations.stream()
+                .collect(Collectors.toMap(RecommendedEventProto::getEventId, RecommendedEventProto::getScore));
+
+        Map<Long, EventFullDto> dtoMap = events.stream()
+                .map(event -> {
+                    UserShortDto owner = usersMap.get(event.getInitiatorId());
+                    EventFullDto dto = eventMapper.toEventFullDto(event, owner);
+                    dto.setRating(scores.getOrDefault(event.getId(), 0.0));
+                    return dto;
+                })
+                .collect(Collectors.toMap(EventFullDto::getId, d -> d));
+
+        return eventIds.stream()
+                .filter(dtoMap::containsKey)
+                .map(dtoMap::get)
+                .toList();
+    }
+
+    public void likeEvent(long eventId, long userId) {
+        Event event = entityValidator.ensureAndGet(eventRepository, eventId, "Event");
+
+        if (event.getEventDate().isAfter(LocalDateTime.now())) {
+            throw new ValidationException("Не может быть лайкнуто событие, которое еще не произошло");
+        }
+
+        List<RequestDto> requests = requestClient.getEventRequests(userId, eventId);
+
+        boolean hasAttended = requests != null && requests.stream()
+                .anyMatch(r -> RequestStatus.CONFIRMED.name().equals(r.getStatus()));
+
+        if (!hasAttended) {
+            throw new ValidationException("Пользователю могут нравиться только посещенные мероприятия");
+        }
+
+        collectorClient.collectUserAction(userId, eventId, UserActionType.LIKE);
+    }
+
+    private void enrichShortWithRatings(List<EventShortDto> dtos) {
+        if (dtos == null || dtos.isEmpty()) return;
+
+        List<Long> eventIds = dtos.stream().map(EventShortDto::getId).toList();
+
+        Map<Long, Double> ratings;
+
+        try {
+            ratings = analyzerClient.getInteractionsCount(eventIds)
+                    .collect(Collectors.toMap(
+                            RecommendedEventProto::getEventId,
+                            RecommendedEventProto::getScore
+                    ));
+        } catch (Exception e) {
+            ratings = Map.of();
+        }
+
+        for (EventShortDto dto : dtos) {
+            dto.setRating(ratings.getOrDefault(dto.getId(), 0.0));
+        }
+    }
+
+    private void enrichFullWithRatings(List<EventFullDto> dtos) {
+        if (dtos == null || dtos.isEmpty()) return;
+
+        List<Long> eventIds = dtos.stream().map(EventFullDto::getId).toList();
+
+        Map<Long, Double> ratings;
+
+        try {
+            ratings = analyzerClient.getInteractionsCount(eventIds)
+                    .collect(Collectors.toMap(
+                            RecommendedEventProto::getEventId,
+                            RecommendedEventProto::getScore
+                    ));
+        } catch (Exception e) {
+            ratings = Map.of();
+        }
+
+        for (EventFullDto dto : dtos) {
+            dto.setRating(ratings.getOrDefault(dto.getId(), 0.0));
+        }
     }
 }

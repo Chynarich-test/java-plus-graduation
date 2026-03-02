@@ -1,0 +1,15 @@
+grpc:
+  server:
+    port: 0
+
+kafka:
+  server: "localhost:9092"
+  group:
+    id: "recomendations.aggregator.group"
+  producer:
+    id: "recomendations.aggregator.producer"
+  topic:
+    user:
+      action: "stats.user-actions.v1"
+    event:
+      similarity: "stats.events-similarity.v1"

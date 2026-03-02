@@ -23,7 +23,7 @@ public class IternalEventController{
     }
 
     @GetMapping("/{id}")
-    public EventFullDto findPublicEventById(@PathVariable long id) {
-        return eventService.findPublicEventById(id);
+    public EventFullDto findPublicEventById(@PathVariable long id,  @RequestHeader("X-EWM-USER-ID") long userId) {
+        return eventService.findPublicEventById(id, userId);
     }
 }

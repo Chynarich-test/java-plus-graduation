@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: analyzer-service
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/ewm-analyzer-db
+    username: dbuser
+    password: 12345
+  sql:
+    init:
+      mode: always
+
+grpc:
+  server:
+    port: 0
+
+kafka:
+  server: "localhost:9092"
+  group:
+    id: "recommendations.analyzer.group"
+  topic:
+    user:
+      action: "stats.user-actions.v1"
+    event:
+      similarity: "stats.events-similarity.v1"
