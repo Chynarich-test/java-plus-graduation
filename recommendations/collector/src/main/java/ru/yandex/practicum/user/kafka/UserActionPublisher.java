@@ -20,11 +20,10 @@ public class UserActionPublisher {
     private String topic;
 
     public void publish(UserActionAvro data) {
-        String key = String.valueOf(data.getUserId());
         long timestamp = data.getTimestamp().toEpochMilli();
 
         ProducerRecord<String, SpecificRecordBase> record =
-                new ProducerRecord<>(topic, null, timestamp, key, data);
+                new ProducerRecord<>(topic, null, timestamp, null, data);
 
         kafkaTemplate.send(record).whenComplete((result, ex) -> {
             if (ex == null) {
@@ -33,7 +32,7 @@ public class UserActionPublisher {
                         result.getRecordMetadata().partition(),
                         result.getRecordMetadata().offset());
             } else {
-                log.error("Ошибка при отправке в Kafka. Topic: {}, Key: {}", topic, key, ex);
+                log.error("Ошибка при отправке в Kafka. Topic: {}, Key: {}", topic, null, ex);
             }
         });
     }

@@ -8,6 +8,5 @@ import ru.yandex.practicum.user.model.UserAction;
 @Mapper(componentModel = "spring")
 public interface UserActionAvroMapper {
 
-    @Mapping(target = "timestamp", expression = "java(userAction.getTimestamp().toEpochMilli())")
     UserActionAvro toAvro(UserAction userAction);
 }
