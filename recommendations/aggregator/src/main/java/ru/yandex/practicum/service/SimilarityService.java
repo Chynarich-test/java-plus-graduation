@@ -11,7 +11,7 @@ import ru.yandex.practicum.model.AllWeights;
 import ru.yandex.practicum.model.MinWeightsSums;
 import ru.yandex.practicum.model.UserAction;
 
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -44,9 +44,7 @@ public class SimilarityService {
                 v == null ? newWeight : v + weightDelta
         );
 
-        Map<Long, Double> userEvents = allWeights.getMap(userId);
-
-        Set<Long> affectedEvents = new HashSet<>();
+        Map<Long, Double> userEvents = new HashMap<>(allWeights.getMap(userId));
 
         for (Map.Entry<Long, Double> entry : userEvents.entrySet()) {
             long eventB = entry.getKey();
@@ -60,7 +58,6 @@ public class SimilarityService {
 
             if (minDelta > 0) {
                 minWeightsSums.addDelta(eventA, eventB, minDelta);
-                affectedEvents.add(eventB);
             }
         }
 
@@ -68,7 +65,9 @@ public class SimilarityService {
 
         double sa = weightsSums.get(eventA);
 
-        for (Long eventB : affectedEvents) {
+        for (Long eventB : userEvents.keySet()) {
+            if (eventB == eventA) continue;
+
             double sMin = minWeightsSums.get(eventA, eventB);
             if (sMin == 0) continue;
 
