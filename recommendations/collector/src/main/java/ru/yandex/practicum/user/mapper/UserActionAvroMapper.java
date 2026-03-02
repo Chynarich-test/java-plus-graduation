@@ -1,11 +1,13 @@
 package ru.yandex.practicum.user.mapper;
 
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 import ru.practicum.ewm.stats.avro.UserActionAvro;
 import ru.yandex.practicum.user.model.UserAction;
 
 @Mapper(componentModel = "spring")
 public interface UserActionAvroMapper {
 
+    @Mapping(target = "timestamp", expression = "java(userAction.getTimestamp().toEpochMilli())")
     UserActionAvro toAvro(UserAction userAction);
 }

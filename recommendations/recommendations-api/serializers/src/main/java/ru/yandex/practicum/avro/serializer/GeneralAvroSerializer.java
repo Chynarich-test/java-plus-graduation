@@ -10,29 +10,22 @@ import org.apache.kafka.common.serialization.Serializer;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 
 public class GeneralAvroSerializer implements Serializer<SpecificRecordBase> {
     private final EncoderFactory encoderFactory = EncoderFactory.get();
 
     @Override
     public byte[] serialize(String topic, SpecificRecordBase data) {
-        if (data == null) return null;
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            byte[] schemaNameBytes = data.getSchema().getFullName()
-                    .getBytes(StandardCharsets.UTF_8);
-            out.write(ByteBuffer.allocate(2)
-                    .putShort((short) schemaNameBytes.length)
-                    .array());
-            out.write(schemaNameBytes);
+            byte[] result = null;
             BinaryEncoder encoder = encoderFactory.binaryEncoder(out, null);
-            DatumWriter<SpecificRecordBase> writer =
-                    new SpecificDatumWriter<>(data.getSchema());
-            writer.write(data, encoder);
-            encoder.flush();
-
-            return out.toByteArray();
+            if (data != null) {
+                DatumWriter<SpecificRecordBase> writer = new SpecificDatumWriter<>(data.getSchema());
+                writer.write(data, encoder);
+                encoder.flush();
+                result = out.toByteArray();
+            }
+            return result;
         } catch (IOException ex) {
             throw new SerializationException("Ошибка сериализации данных для топика [" + topic + "]", ex);
         }
