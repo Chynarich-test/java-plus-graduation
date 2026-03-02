@@ -11,7 +11,9 @@ import ru.yandex.practicum.model.AllWeights;
 import ru.yandex.practicum.model.MinWeightsSums;
 import ru.yandex.practicum.model.UserAction;
 
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
@@ -32,7 +34,7 @@ public class SimilarityService {
 
         double oldWeight = allWeights.get(userId, eventA);
 
-        if(newWeight <= oldWeight){
+        if (newWeight <= oldWeight) {
             return;
         }
 
@@ -43,6 +45,8 @@ public class SimilarityService {
         );
 
         Map<Long, Double> userEvents = allWeights.getMap(userId);
+
+        Set<Long> affectedEvents = new HashSet<>();
 
         for (Map.Entry<Long, Double> entry : userEvents.entrySet()) {
             long eventB = entry.getKey();
@@ -56,6 +60,7 @@ public class SimilarityService {
 
             if (minDelta > 0) {
                 minWeightsSums.addDelta(eventA, eventB, minDelta);
+                affectedEvents.add(eventB);
             }
         }
 
@@ -63,15 +68,11 @@ public class SimilarityService {
 
         double sa = weightsSums.get(eventA);
 
-        for (Long eventB : weightsSums.keySet()) {
-            if (eventA == eventB) continue;
-
+        for (Long eventB : affectedEvents) {
             double sMin = minWeightsSums.get(eventA, eventB);
-
             if (sMin == 0) continue;
 
             double sb = weightsSums.get(eventB);
-
             if (sa == 0 || sb == 0) continue;
 
             double similarity = getSimilarity(sa, sb, sMin);
@@ -88,8 +89,6 @@ public class SimilarityService {
 
             eventSimilarityPublisher.publish(similarityAvro);
         }
-
-
     }
 
     private static double getSimilarity(double Sa, double Sb, double Smin){
