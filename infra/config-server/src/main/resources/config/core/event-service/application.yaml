@@ -40,12 +40,12 @@ app:
 grpc:
   client:
     collector:
-      address: 'discovery:///collector-service'
+      address: 'discovery:///collector'
       enableKeepAlive: true
       keepAliveWithoutCalls: true
       negotiationType: plaintext
     analyzer:
-      address: 'discovery:///analyzer-service'
+      address: 'discovery:///analyzer'
       enableKeepAlive: true
       keepAliveWithoutCalls: true
       negotiationType: plaintext
