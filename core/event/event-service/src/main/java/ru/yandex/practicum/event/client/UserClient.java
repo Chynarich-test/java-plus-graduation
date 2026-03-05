@@ -16,6 +16,6 @@ public interface UserClient{
 
     @GetMapping
     List<UserDto> getUsers(@RequestParam(required = false) List<Long> ids,
-                                  @RequestParam(name = "from", required = false, defaultValue = "0") int from,
-                                  @RequestParam(name = "size", required = false, defaultValue = "10") int size);
+                                  @RequestParam(name = "from", defaultValue = "0") int from,
+                                  @RequestParam(name = "size", defaultValue = "10") int size);
 }

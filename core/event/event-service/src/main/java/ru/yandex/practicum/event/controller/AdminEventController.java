@@ -2,8 +2,6 @@ package ru.yandex.practicum.event.controller;
 
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import ru.yandex.practicum.event.dto.EventFullDto;
 import ru.yandex.practicum.event.dto.UpdateEventAdminRequest;
@@ -14,8 +12,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping(path = "/admin/events")
-@Slf4j
-@Validated
 @AllArgsConstructor
 public class AdminEventController {
     private final EventService eventService;

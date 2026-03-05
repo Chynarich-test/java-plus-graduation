@@ -39,6 +39,21 @@ public class UserActionRepository {
                     created = GREATEST(user_actions_history.created, EXCLUDED.created);
                 """;
 
+        //Почитал источники, на гибернейте все таки можно вот как то так. Спасибо!
+        //Но как сделать GREATEST HQL все равно не понял, но я понял свои пробелы, почитаю.
+//        session.createMutationQuery("""
+//            insert into UserActionHistory (userId, eventId, actionScore, created)
+//            values (:userId, :eventId, :actionScore, :timestamp)
+//            on conflict(userId, eventId) do update
+//            set actionScore = excluded.actionScore,
+//                created = excluded.created
+//            """)
+//        .setParameter("userId", userAction.getUserId())
+//        .setParameter("eventId", userAction.getEventId())
+//        .setParameter("actionScore", userAction.getActionType())
+//        .setParameter("timestamp", userAction.getTimestamp())
+//        .executeUpdate();
+
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("userId", userAction.getUserId())
                 .addValue("eventId", userAction.getEventId())
