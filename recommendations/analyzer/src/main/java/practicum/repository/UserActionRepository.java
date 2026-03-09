@@ -29,7 +29,6 @@ public class UserActionRepository {
                     .build();
 
     public void save(UserAction userAction){
-        //Я не понял как в гибернейте сделать ON CONFLICT, поэтому решил через jdbcTemplate
         String sql = """
                 INSERT INTO user_actions_history (user_id, event_id, action_score, created)
                 VALUES (:userId, :eventId, :actionScore, :timestamp)

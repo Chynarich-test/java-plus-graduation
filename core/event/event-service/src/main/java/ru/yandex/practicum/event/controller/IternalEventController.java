@@ -1,8 +1,6 @@
 package ru.yandex.practicum.event.controller;
 
 import lombok.AllArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import ru.yandex.practicum.event.dto.EventFullDto;
 import ru.yandex.practicum.event.service.EventService;
@@ -11,8 +9,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping(path = "/internal/events")
-@Slf4j
-@Validated
 @AllArgsConstructor
 public class IternalEventController{
     private final EventService eventService;

@@ -197,8 +197,11 @@ public class RequestServiceImpl implements RequestService {
                 }
             }
 
-            confirmed.forEach(requestRepository::save);
-            rejected.forEach(requestRepository::save);
+            List<Request> requestsToSave = new ArrayList<>();
+            requestsToSave.addAll(confirmed);
+            requestsToSave.addAll(rejected);
+
+            requestRepository.saveAll(requestsToSave);
 
             return EventRequestStatusUpdateResult.builder()
                     .confirmedRequests(mapper.toDtoList(confirmed))
