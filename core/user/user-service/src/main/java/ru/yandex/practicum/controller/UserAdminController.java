@@ -1,8 +1,11 @@
 package ru.yandex.practicum.controller;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import ru.yandex.practicum.dto.NewUserRequest;
 import ru.yandex.practicum.dto.PageParams;
@@ -14,6 +17,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/admin/users")
 @RequiredArgsConstructor
+@Validated
 public class UserAdminController{
 
     private final UserService userService;
@@ -26,8 +30,8 @@ public class UserAdminController{
 
     @GetMapping
     public List<UserDto> getUsers(@RequestParam(required = false) List<Long> ids,
-                                  @RequestParam(name = "from", required = false, defaultValue = "0") int from,
-                                  @RequestParam(name = "size", required = false, defaultValue = "10") int size) {
+                                  @RequestParam(name = "from", defaultValue = "0") @PositiveOrZero int from,
+                                  @RequestParam(name = "size", defaultValue = "10") @Positive int size) {
         PageParams pageParams = new PageParams(from, size);
         return userService.getUsers(ids, pageParams);
     }

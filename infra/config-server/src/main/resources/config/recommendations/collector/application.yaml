@@ -1,0 +1,11 @@
+grpc:
+  server:
+    port: 0
+
+kafka:
+  server: "localhost:9092"
+  producer:
+    id: "recomendations.collector"
+  topic:
+    user:
+      action: "stats.user-actions.v1"

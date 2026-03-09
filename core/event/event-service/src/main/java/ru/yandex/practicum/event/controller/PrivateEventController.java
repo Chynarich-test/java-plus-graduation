@@ -4,10 +4,10 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.AllArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import ru.yandex.practicum.common.dsl.exception.ConflictException;
 import ru.yandex.practicum.dto.EventRequestStatusUpdateRequest;
 import ru.yandex.practicum.dto.EventRequestStatusUpdateResult;
 import ru.yandex.practicum.dto.RequestDto;
@@ -22,7 +22,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping(path = "/users/{userId}/events")
-@Slf4j
 @Validated
 @AllArgsConstructor
 public class PrivateEventController{
@@ -66,7 +65,11 @@ public class PrivateEventController{
     @PatchMapping("/{eventId}/requests")
     public EventRequestStatusUpdateResult updateStatuses(@PathVariable Long userId,
                                                          @PathVariable Long eventId,
-                                                         @RequestBody EventRequestStatusUpdateRequest request) {
+                                                         @RequestBody(required = false) EventRequestStatusUpdateRequest request) {
+        if (request == null) {
+            throw new ConflictException("Тело запроса не может быть пустым");
+        }
+
         return eventService.changeRequestStatus(userId, eventId, request);
     }
 }
